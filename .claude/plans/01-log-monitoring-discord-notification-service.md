@@ -139,3 +139,23 @@ OMS Log Monitoring & Discord Notification Service — Implementation Plan
  confirm: new ERROR log → Discord webhook receives a correctly formatted
  message; repeat call with same latest id → no duplicate Discord message.
  - Kill the process with Ctrl+C and confirm graceful shutdown log lines
+
+
+ The app is already fully implemented (from earlier in this session). To run it:
+
+  1. Install dependencies (one-time):
+  cd E:\xfl-projects\log-monitoring-app
+  npm install
+  2. Create .env from the template and fill in real values:
+  cp .env.example .env
+  2. Edit .env to set OMS_USERNAME, OMS_PASSWORD, OMS_DEVICE_ID, OMS_MFA_KEY/OMS_MFA_CODE (if needed), and DISCORD_WEBHOOK_URL.
+  3. Start it:
+    - npm run dev — auto-restarts on file changes (good for local dev)
+    - npm start — plain run
+  4. Check it's working:
+    - GET http://localhost:3000/health
+    - GET http://localhost:3000/status
+    - POST http://localhost:3000/run-now — fires a monitoring cycle immediately instead of waiting for the cron schedule
+    - GET http://localhost:3000/version
+  5. Logs land in console plus logs/app-*.log and logs/error-*.log.
+  6. For production with PM2: npm install -g pm2 then npm run pm2:start, view with pm2 logs oms-log-monitor.
