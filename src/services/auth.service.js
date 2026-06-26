@@ -21,8 +21,10 @@ async function login() {
       appType: config.oms.appType,
     });
 
-    const data = response.data || {};
+    const envelope = response.data || {};
+    const data = envelope.data || envelope;
     if (!data.accessToken && !data.token) {
+      logger.error('OMS login response missing token', { responseData: envelope });
       throw new AuthenticationError('Login response did not contain an access token');
     }
 
@@ -34,7 +36,11 @@ async function login() {
       expiresIn: data.expiresIn,
     };
   } catch (err) {
-    logger.error('OMS authentication failed', { error: err.message });
+    logger.error('OMS authentication failed', {
+      error: err.message,
+      status: err.response?.status,
+      responseData: err.response?.data,
+    });
     throw new AuthenticationError('Failed to authenticate with OMS API', err);
   }
 }

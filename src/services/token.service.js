@@ -38,7 +38,8 @@ async function refresh() {
     const response = await httpClient.post('/api/refresh-token', {
       refreshToken: state.refreshToken,
     });
-    const data = response.data || {};
+    const envelope = response.data || {};
+    const data = envelope.data || envelope;
     if (!data.accessToken && !data.token) {
       throw new Error('Refresh response did not contain an access token');
     }
