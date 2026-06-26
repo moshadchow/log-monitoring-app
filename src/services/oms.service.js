@@ -14,9 +14,7 @@ async function fetchLogs() {
   const accessToken = await tokenService.getValidAccessToken();
 
   const now = new Date();
-  // const from = new Date(now.getTime() - 5 * 60 * 1000);
-  const from = new Date(now);
-  from.setDate(from.getDate() - 1);
+  const from = new Date(now.getTime() - 480 * 60 * 1000);
   const fmt = (d) => {
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -27,6 +25,7 @@ async function fetchLogs() {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: {
         'Filter.logType': 'WorkerLog',
+        'Filter.level': 'ERROR',
         'Filter.fromDateTimeLocal': fmt(from),
         'Filter.toDateTimeLocal': fmt(now),
         'Paging.page': 1,

@@ -15,8 +15,8 @@ function truncate(text, maxLength) {
 
 function buildMessage(log) {
   const timestamp = log.dateTimeLocal || log.timestamp || 'N/A';
-  const message = truncate(escapeMarkdown(log.message), 1000);
-  const exception = truncate(escapeMarkdown(log.exception), 1000);
+  const message = truncate(escapeMarkdown(log.message), 850);
+  const exception = truncate(escapeMarkdown(log.exception), 850);
 
   const content = [
     '🚨 **OMS Error Alert**',
