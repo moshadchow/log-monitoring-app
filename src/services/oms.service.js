@@ -10,11 +10,11 @@ class OmsApiError extends Error {
   }
 }
 
-async function fetchLogs() {
+async function fetchLogs(logType) {
   const accessToken = await tokenService.getValidAccessToken();
 
   const now = new Date();
-  const from = new Date(now.getTime() - 480 * 60 * 1000);
+  const from = new Date(now.getTime() - 5 * 60 * 1000);
   const fmt = (d) => {
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -24,7 +24,7 @@ async function fetchLogs() {
     const response = await httpClient.get('/api/logs', {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: {
-        'Filter.logType': 'WorkerLog',
+        'Filter.logType': logType,
         'Filter.level': 'ERROR',
         'Filter.fromDateTimeLocal': fmt(from),
         'Filter.toDateTimeLocal': fmt(now),
@@ -35,7 +35,7 @@ async function fetchLogs() {
 
     const body = response.data;
     if (!body || body.success !== true || !Array.isArray(body.data)) {
-      logger.error('OMS logs API returned unexpected shape', { responseData: body });
+      logger.error('OMS logs API returned unexpected shape', { logType, responseData: body });
       throw new OmsApiError('Invalid response shape from OMS logs API');
     }
 
@@ -44,10 +44,11 @@ async function fetchLogs() {
     const envelope = err.response?.data || {};
     const data = envelope.data || envelope;
     if (err instanceof OmsApiError) {
-      logger.error('OMS logs API returned an invalid response', { error: err.message });
+      logger.error('OMS logs API returned an invalid response', { logType, error: err.message });
       throw err;
     }
     logger.error('Failed to fetch logs from OMS API', {
+      logType,
       error: err.message,
       code: err.code,
       status: err.response?.status,
@@ -57,4 +58,21 @@ async function fetchLogs() {
   }
 }
 
-module.exports = { fetchLogs, OmsApiError };
+async function fetchAllLogs() {
+  const [workerResult, apiResult] = await Promise.allSettled([
+    fetchLogs('WorkerLog'),
+    fetchLogs('ApiLog'),
+  ]);
+
+  if (workerResult.status === 'rejected' && apiResult.status === 'rejected') {
+    logger.error('Failed to fetch logs from both WorkerLog and ApiLog sources');
+    throw new OmsApiError('Failed to fetch logs from OMS API', apiResult.reason);
+  }
+
+  const workerLogs = workerResult.status === 'fulfilled' ? workerResult.value : [];
+  const apiLogs = apiResult.status === 'fulfilled' ? apiResult.value : [];
+
+  return [...workerLogs, ...apiLogs];
+}
+
+module.exports = { fetchLogs, fetchAllLogs, OmsApiError };

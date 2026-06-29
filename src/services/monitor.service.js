@@ -6,7 +6,7 @@ const logger = require('../config/logger');
 async function runCycle() {
   const startedAt = Date.now();
   try {
-    const logs = await omsService.fetchLogs();
+    const logs = await omsService.fetchAllLogs();
 
     const errorLogs = logs
       .filter((log) => log.level === 'ERROR')
