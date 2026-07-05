@@ -4,3 +4,4 @@ logs/
 .DS_Store
 .venv/
 src/storage/state.json
+.env
