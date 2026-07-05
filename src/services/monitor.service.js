@@ -2,6 +2,8 @@ const omsService = require('./oms.service');
 const discordService = require('./discord.service');
 const stateStore = require('../utils/stateStore');
 const logger = require('../config/logger');
+const ignorePatterns = require('../config/ignorePatterns');
+const { isIgnoredLog } = require('../utils/logFilter');
 
 async function runCycle() {
   const startedAt = Date.now();
@@ -12,8 +14,13 @@ async function runCycle() {
       .filter((log) => log.level === 'ERROR')
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    if (errorLogs.length === 0) {
-      logger.info('Monitoring cycle complete: no error logs found');
+    const notifiableLogs = errorLogs.filter((log) => !isIgnoredLog(log, ignorePatterns));
+
+    if (notifiableLogs.length === 0) {
+      logger.info('Monitoring cycle complete: no notifiable error logs found', {
+        totalErrorLogs: errorLogs.length,
+        ignoredCount: errorLogs.length - notifiableLogs.length,
+      });
       stateStore.writeState({
         lastExecutionAt: new Date().toISOString(),
         lastExecutionStatus: 'success',
@@ -21,7 +28,7 @@ async function runCycle() {
       return { notified: false };
     }
 
-    const latest = errorLogs[0];
+    const latest = notifiableLogs[0];
     const { lastSeenLogId } = stateStore.readState();
 
     if (latest.id === lastSeenLogId) {
