@@ -5,12 +5,20 @@ function escapeRegexExceptWildcard(pattern) {
 function patternToRegex(pattern) {
   const escaped = escapeRegexExceptWildcard(pattern);
   const regexBody = escaped.split('*').join('.*');
-  return new RegExp(`^${regexBody}$`, 'i');
+  return new RegExp(regexBody, 'i');
+}
+
+function normalize(message) {
+  return String(message || '').trim().replace(/\s+/g, ' ');
 }
 
 function matchesIgnorePattern(message, patterns) {
-  if (!message) return false;
-  return patterns.some((pattern) => patternToRegex(pattern).test(message));
+  const normalized = normalize(message);
+  if (!normalized) return false;
+  return patterns.some((pattern) => {
+    const regex = pattern instanceof RegExp ? pattern : patternToRegex(pattern);
+    return regex.test(normalized);
+  });
 }
 
 function isIgnoredLog(log, patterns) {
