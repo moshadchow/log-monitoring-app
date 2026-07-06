@@ -2,11 +2,17 @@ const axios = require('axios');
 const axiosRetry = require('axios-retry').default || require('axios-retry');
 const config = require('../config/env');
 const logger = require('../config/logger');
+const omsConfigService = require('../services/omsConfig.service');
 
 const httpClient = axios.create({
-  baseURL: config.oms.baseUrl,
   timeout: config.requestTimeoutMs,
   headers: { 'Content-Type': 'application/json' },
+});
+
+httpClient.interceptors.request.use(async (requestConfig) => {
+  const omsConfig = await omsConfigService.getOmsConfig();
+  requestConfig.baseURL = omsConfig.baseUrl;
+  return requestConfig;
 });
 
 axiosRetry(httpClient, {

@@ -19,9 +19,10 @@ The service authenticates with an OMS (Order Management System) API, polls for e
 
 ### Startup sequence (`src/server.js`)
 
-1. `tokenService.authenticate()` — logs in to OMS, stores JWT in memory. Failure is non-fatal; cron will retry.
-2. `cronJob.start()` — schedules the monitoring cycle via `node-cron`.
-3. `app.listen()` — starts Express on `PORT` (default 3000).
+1. `omsConfigService.getOmsConfig()` — loads the active OMS endpoint from MySQL. Failure is non-fatal; requests/cron will retry.
+2. `tokenService.authenticate()` — logs in to OMS, stores JWT in memory. Failure is non-fatal; cron will retry.
+3. `cronJob.start()` — schedules the monitoring cycle via `node-cron`.
+4. `app.listen()` — starts Express on `PORT` (default 3000).
 
 ### Main data flow per cron tick
 
@@ -54,7 +55,8 @@ This pattern is already applied in `auth.service.js` and `token.service.js`. App
 | `src/services/oms.service.js` | `fetchLogs()` — GET /api/logs with 5-minute rolling window, `Filter.logType=WorkerLog`, local-time datetime params |
 | `src/services/monitor.service.js` | Orchestration: fetch → dedupe → notify → persist |
 | `src/services/discord.service.js` | Formats and POSTs to Discord webhook (uses plain `axios`, not the shared httpClient) |
-| `src/utils/httpClient.js` | Axios instance with `baseURL=OMS_BASE_URL`, 3 retries with exponential backoff (retries 429, 5xx, network errors) |
+| `src/services/omsConfig.service.js` | DB-backed OMS config loader; TTL cache + in-flight de-dupe + stale-fallback on DB error, mirrors `token.service.js`'s pattern |
+| `src/utils/httpClient.js` | Axios instance; base URL synced per-request from `omsConfig.service.js`'s cache, 3 retries with exponential backoff (retries 429, 5xx, network errors) |
 
 ### State persistence
 
@@ -62,7 +64,9 @@ This pattern is already applied in `auth.service.js` and `token.service.js`. App
 
 ### Configuration
 
-`src/config/env.js` loads `.env` and fails fast if any required var is missing: `OMS_BASE_URL`, `OMS_USERNAME`, `OMS_PASSWORD`, `OMS_DEVICE_ID`, `DISCORD_WEBHOOK_URL`.
+`src/config/env.js` loads `.env` and fails fast if any required var is missing: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `APP_ENCRYPTION_KEY`, `DISCORD_WEBHOOK_URL`.
+
+OMS endpoint settings (`base_url`, `username`, `encrypted_password`, `device_id`, `mfa_key`, `mfa_code`, `app_type`) are **not** in `.env` — they live in the MySQL table `broker_db.oms_endpoints` and are loaded/cached by `src/services/omsConfig.service.js` (TTL `OMS_CONFIG_CACHE_TTL_MS`, default 5 minutes; falls back to the last-known-good config if a DB refresh fails). `encrypted_password` is decrypted with `APP_ENCRYPTION_KEY`. Only the row with `is_active = 1` (most recently updated, if several) is used.
 
 The `Filter.fromDateTimeLocal` / `Filter.toDateTimeLocal` params use **local time** (via `getFullYear/Month/Date/Hours/Minutes`), not UTC — the OMS server expects local datetime strings.
 

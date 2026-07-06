@@ -2,12 +2,21 @@ const app = require('./app');
 const config = require('./config/env');
 const logger = require('./config/logger');
 const tokenService = require('./services/token.service');
+const omsConfigService = require('./services/omsConfig.service');
 const cronJob = require('./jobs/cron.job');
 
 let server = null;
 
 async function start() {
   logger.info('Starting OMS Log Monitoring Service', { env: config.nodeEnv });
+
+  try {
+    await omsConfigService.getOmsConfig();
+  } catch (err) {
+    logger.error('Initial OMS config load from database failed, will retry on next request', {
+      error: err.message,
+    });
+  }
 
   try {
     await tokenService.authenticate();

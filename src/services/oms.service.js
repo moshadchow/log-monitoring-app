@@ -39,7 +39,7 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
 
     const body = response.data;
     if (!body || body.success !== true || !Array.isArray(body.data)) {
-      logger.error('OMS logs API returned unexpected shape', { logType, responseData: body });
+      logger.error('OMS logs API returned unexpected shape', { logType, status: response.status });
       throw new OmsApiError('Invalid response shape from OMS logs API');
     }
 
@@ -48,14 +48,12 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
     if (err.response?.status === 401 && retryOn401) {
       logger.warn('OMS session invalidated, re-authenticating and retrying', {
         logType,
-        responseData: err.response?.data,
+        status: err.response.status,
       });
       await tokenService.authenticate();
       return fetchLogs(logType, { retryOn401: false });
     }
 
-    const envelope = err.response?.data || {};
-    const data = envelope.data || envelope;
     if (err instanceof OmsApiError) {
       logger.error('OMS logs API returned an invalid response', { logType, error: err.message });
       throw err;
@@ -65,7 +63,6 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
       error: err.message,
       code: err.code,
       status: err.response?.status,
-      responseData: err.response?.data,
     });
     throw new OmsApiError('Failed to fetch logs from OMS API', err);
   }

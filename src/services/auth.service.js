@@ -1,5 +1,5 @@
 const httpClient = require('../utils/httpClient');
-const config = require('../config/env');
+const omsConfigService = require('./omsConfig.service');
 const logger = require('../config/logger');
 
 class AuthenticationError extends Error {
@@ -12,19 +12,20 @@ class AuthenticationError extends Error {
 
 async function login() {
   try {
+    const omsConfig = await omsConfigService.getOmsConfig();
     const response = await httpClient.post('/api/login', {
-      loginId: config.oms.username,
-      password: config.oms.password,
-      deviceId: config.oms.deviceId,
-      mfaKey: config.oms.mfaKey,
-      mfaCode: config.oms.mfaCode,
-      appType: config.oms.appType,
+      loginId: omsConfig.username,
+      password: omsConfig.password,
+      deviceId: omsConfig.deviceId,
+      mfaKey: omsConfig.mfaKey,
+      mfaCode: omsConfig.mfaCode,
+      appType: omsConfig.appType,
     });
 
     const envelope = response.data || {};
     const data = envelope.data || envelope;
     if (!data.accessToken && !data.token) {
-      logger.error('OMS login response missing token', { responseData: envelope });
+      logger.error('OMS login response missing token', { status: response.status });
       throw new AuthenticationError('Login response did not contain an access token');
     }
 
@@ -39,7 +40,6 @@ async function login() {
     logger.error('OMS authentication failed', {
       error: err.message,
       status: err.response?.status,
-      responseData: err.response?.data,
     });
     throw new AuthenticationError('Failed to authenticate with OMS API', err);
   }

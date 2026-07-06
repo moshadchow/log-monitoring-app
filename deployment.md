@@ -20,7 +20,14 @@ rsync -avz --exclude node_modules --exclude logs --exclude src/storage \
 cd /opt/log-monitoring-app
 npm install --omit=dev
 cp .env.example .env
-# edit .env with real OMS_USERNAME/PASSWORD/DEVICE_ID/DISCORD_WEBHOOK_URL, NODE_ENV=production
+# edit .env with DB_HOST/DB_USER/DB_PASSWORD/DB_NAME, APP_ENCRYPTION_KEY, DISCORD_WEBHOOK_URL, NODE_ENV=production
+
+3a. Provision broker_db.oms_endpoints (run once)
+mysql -u root -p < sql/001_create_oms_endpoints.sql
+# then insert the active OMS endpoint with encrypted_password before going live
+# existing installs should also run:
+# mysql -u root -p broker_db < sql/002_migrate_oms_endpoints_encrypted_password.sql
+# mysql -u root -p broker_db < sql/003_drop_plain_oms_password.sql
 
 4. Run under PM2, enable on boot
 pm2 start src/server.js --name oms-log-monitor
