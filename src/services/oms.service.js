@@ -10,9 +10,7 @@ class OmsApiError extends Error {
   }
 }
 
-async function fetchLogs(logType) {
-  const accessToken = await tokenService.getValidAccessToken();
-
+function buildParams(logType) {
   const now = new Date();
   const from = new Date(now.getTime() - 5 * 60 * 1000);
   const fmt = (d) => {
@@ -20,17 +18,23 @@ async function fetchLogs(logType) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  return {
+    'Filter.logType': logType,
+    'Filter.level': 'ERROR',
+    'Filter.fromDateTimeLocal': fmt(from),
+    'Filter.toDateTimeLocal': fmt(now),
+    'Paging.page': 1,
+    'Paging.size': 50,
+  };
+}
+
+async function fetchLogs(logType, { retryOn401 = true } = {}) {
+  const accessToken = await tokenService.getValidAccessToken();
+
   try {
     const response = await httpClient.get('/api/logs', {
       headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        'Filter.logType': logType,
-        'Filter.level': 'ERROR',
-        'Filter.fromDateTimeLocal': fmt(from),
-        'Filter.toDateTimeLocal': fmt(now),
-        'Paging.page': 1,
-        'Paging.size': 50,
-      },
+      params: buildParams(logType),
     });
 
     const body = response.data;
@@ -41,6 +45,15 @@ async function fetchLogs(logType) {
 
     return body.data;
   } catch (err) {
+    if (err.response?.status === 401 && retryOn401) {
+      logger.warn('OMS session invalidated, re-authenticating and retrying', {
+        logType,
+        responseData: err.response?.data,
+      });
+      await tokenService.authenticate();
+      return fetchLogs(logType, { retryOn401: false });
+    }
+
     const envelope = err.response?.data || {};
     const data = envelope.data || envelope;
     if (err instanceof OmsApiError) {

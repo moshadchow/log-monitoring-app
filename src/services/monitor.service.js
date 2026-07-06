@@ -14,7 +14,16 @@ async function runCycle() {
       .filter((log) => log.level === 'ERROR')
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+    errorLogs.forEach((log) => {
+      logger.debug({ message: log.message, ignored: isIgnoredLog(log, ignorePatterns) });
+    });
+
     const notifiableLogs = errorLogs.filter((log) => !isIgnoredLog(log, ignorePatterns));
+
+    logger.debug('Ignore filter applied', {
+      totalErrorLogs: errorLogs.length,
+      ignoredCount: errorLogs.length - notifiableLogs.length,
+    });
 
     if (notifiableLogs.length === 0) {
       logger.info('Monitoring cycle complete: no notifiable error logs found', {
