@@ -1,40 +1,54 @@
-const httpClient = require('../utils/httpClient');
+const { getClient } = require('../utils/httpClient');
 const authService = require('./auth.service');
 const config = require('../config/env');
 const logger = require('../config/logger');
 
 const DEFAULT_TOKEN_TTL_MS = 15 * 60 * 1000;
 
-let state = {
-  accessToken: null,
-  refreshToken: null,
-  expiresAt: 0,
-};
+const states = new Map();
+const refreshInFlight = new Map();
 
-let refreshInFlight = null;
+function createState() {
+  return {
+    accessToken: null,
+    refreshToken: null,
+    expiresAt: 0,
+  };
+}
 
-function setTokens({ accessToken, refreshToken, expiresIn }) {
+function getState(endpoint = config.oms.baseUrl) {
+  if (!states.has(endpoint)) {
+    states.set(endpoint, createState());
+  }
+  return states.get(endpoint);
+}
+
+function setTokens(endpoint, { accessToken, refreshToken, expiresIn }) {
+  const state = getState(endpoint);
   const ttlMs = (expiresIn ? expiresIn * 1000 : DEFAULT_TOKEN_TTL_MS);
-  state = {
+  const next = {
     accessToken,
     refreshToken: refreshToken || state.refreshToken,
     expiresAt: Date.now() + ttlMs,
   };
+  states.set(endpoint, next);
 }
 
-async function authenticate() {
-  const tokens = await authService.login();
-  setTokens(tokens);
-  return state.accessToken;
+async function authenticate(endpoint = config.oms.baseUrl) {
+  const tokens = await authService.login(endpoint);
+  setTokens(endpoint, tokens);
+  return getState(endpoint).accessToken;
 }
 
-async function refresh() {
+async function refresh(endpoint = config.oms.baseUrl) {
+  const state = getState(endpoint);
   if (!state.refreshToken) {
-    logger.warn('No refresh token available, performing full re-authentication');
-    return authenticate();
+    logger.warn('No refresh token available, performing full re-authentication', { endpoint });
+    return authenticate(endpoint);
   }
 
   try {
+    const httpClient = getClient(endpoint);
     const response = await httpClient.post('/api/refresh-token', {
       refreshToken: state.refreshToken,
     });
@@ -43,46 +57,51 @@ async function refresh() {
     if (!data.accessToken && !data.token) {
       throw new Error('Refresh response did not contain an access token');
     }
-    setTokens({
+    setTokens(endpoint, {
       accessToken: data.accessToken || data.token,
       refreshToken: data.refreshToken || state.refreshToken,
       expiresIn: data.expiresIn,
     });
-    logger.info('OMS access token refreshed successfully');
-    return state.accessToken;
+    logger.info('OMS access token refreshed successfully', { endpoint });
+    return getState(endpoint).accessToken;
   } catch (err) {
     logger.warn('Token refresh failed, falling back to full re-authentication', {
+      endpoint,
       error: err.message,
     });
-    return authenticate();
+    return authenticate(endpoint);
   }
 }
 
-function isExpiringSoon() {
+function isExpiringSoon(endpoint = config.oms.baseUrl) {
+  const state = getState(endpoint);
   return Date.now() >= state.expiresAt - config.tokenRefreshBufferMs;
 }
 
-async function getValidAccessToken() {
-  if (state.accessToken && !isExpiringSoon()) {
+async function getValidAccessToken(endpoint = config.oms.baseUrl) {
+  const state = getState(endpoint);
+  if (state.accessToken && !isExpiringSoon(endpoint)) {
     return state.accessToken;
   }
 
-  if (refreshInFlight) {
-    return refreshInFlight;
+  if (refreshInFlight.has(endpoint)) {
+    return refreshInFlight.get(endpoint);
   }
 
-  refreshInFlight = (state.accessToken ? refresh() : authenticate()).finally(() => {
-    refreshInFlight = null;
+  const promise = (state.accessToken ? refresh(endpoint) : authenticate(endpoint)).finally(() => {
+    refreshInFlight.delete(endpoint);
   });
+  refreshInFlight.set(endpoint, promise);
 
-  return refreshInFlight;
+  return promise;
 }
 
-function getStatus() {
+function getStatus(endpoint = config.oms.baseUrl) {
+  const state = getState(endpoint);
   return {
     hasAccessToken: Boolean(state.accessToken),
     expiresAt: state.expiresAt ? new Date(state.expiresAt).toISOString() : null,
-    expiringSoon: isExpiringSoon(),
+    expiringSoon: isExpiringSoon(endpoint),
   };
 }
 

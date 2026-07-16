@@ -1,4 +1,4 @@
-const httpClient = require('../utils/httpClient');
+const { getClient } = require('../utils/httpClient');
 const config = require('../config/env');
 const logger = require('../config/logger');
 
@@ -10,8 +10,9 @@ class AuthenticationError extends Error {
   }
 }
 
-async function login() {
+async function login(endpoint = config.oms.baseUrl) {
   try {
+    const httpClient = getClient(endpoint);
     const response = await httpClient.post('/api/login', {
       loginId: config.oms.username,
       password: config.oms.password,
@@ -28,7 +29,7 @@ async function login() {
       throw new AuthenticationError('Login response did not contain an access token');
     }
 
-    logger.info('OMS authentication successful');
+    logger.info('OMS authentication successful', { endpoint });
 
     return {
       accessToken: data.accessToken || data.token,
@@ -37,6 +38,7 @@ async function login() {
     };
   } catch (err) {
     logger.error('OMS authentication failed', {
+      endpoint,
       error: err.message,
       status: err.response?.status,
       responseData: err.response?.data,

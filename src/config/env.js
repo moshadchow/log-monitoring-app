@@ -2,12 +2,24 @@ const path = require('path');
 require('dotenv').config();
 
 const REQUIRED_VARS = [
-  'OMS_BASE_URL',
   'OMS_USERNAME',
   'OMS_PASSWORD',
   'OMS_DEVICE_ID',
   'DISCORD_WEBHOOK_URL',
 ];
+
+function parseEndpoints() {
+  const raw = process.env.OMS_API_ENDPOINTS || process.env.OMS_BASE_URL || '';
+  return raw
+    .split(',')
+    .map((endpoint) => endpoint.trim())
+    .filter(Boolean);
+}
+
+const omsEndpoints = parseEndpoints();
+if (omsEndpoints.length === 0) {
+  REQUIRED_VARS.push('OMS_API_ENDPOINTS');
+}
 
 const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
 if (missing.length > 0) {
@@ -21,7 +33,8 @@ const config = {
   port: parseInt(process.env.PORT, 10) || 3000,
 
   oms: {
-    baseUrl: process.env.OMS_BASE_URL,
+    baseUrl: omsEndpoints[0],
+    endpoints: omsEndpoints,
     username: process.env.OMS_USERNAME,
     password: process.env.OMS_PASSWORD,
     deviceId: process.env.OMS_DEVICE_ID,

@@ -9,13 +9,17 @@ let server = null;
 async function start() {
   logger.info('Starting OMS Log Monitoring Service', { env: config.nodeEnv });
 
-  try {
-    await tokenService.authenticate();
-  } catch (err) {
-    logger.error('Initial OMS authentication failed, will retry on first scheduled run', {
-      error: err.message,
-    });
-  }
+  const authResults = await Promise.allSettled(
+    config.oms.endpoints.map((endpoint) => tokenService.authenticate(endpoint))
+  );
+  authResults.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      logger.error('Initial OMS authentication failed, will retry on first scheduled run', {
+        endpoint: config.oms.endpoints[index],
+        error: result.reason.message,
+      });
+    }
+  });
 
   cronJob.start();
 

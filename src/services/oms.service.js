@@ -1,5 +1,6 @@
-const httpClient = require('../utils/httpClient');
+const { getClient } = require('../utils/httpClient');
 const tokenService = require('./token.service');
+const config = require('../config/env');
 const logger = require('../config/logger');
 
 class OmsApiError extends Error {
@@ -28,8 +29,9 @@ function buildParams(logType) {
   };
 }
 
-async function fetchLogs(logType, { retryOn401 = true } = {}) {
-  const accessToken = await tokenService.getValidAccessToken();
+async function fetchLogs(logType, { endpoint = config.oms.baseUrl, retryOn401 = true } = {}) {
+  const accessToken = await tokenService.getValidAccessToken(endpoint);
+  const httpClient = getClient(endpoint);
 
   try {
     const response = await httpClient.get('/api/logs', {
@@ -39,7 +41,7 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
 
     const body = response.data;
     if (!body || body.success !== true || !Array.isArray(body.data)) {
-      logger.error('OMS logs API returned unexpected shape', { logType, responseData: body });
+      logger.error('OMS logs API returned unexpected shape', { endpoint, logType, responseData: body });
       throw new OmsApiError('Invalid response shape from OMS logs API');
     }
 
@@ -47,20 +49,20 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
   } catch (err) {
     if (err.response?.status === 401 && retryOn401) {
       logger.warn('OMS session invalidated, re-authenticating and retrying', {
+        endpoint,
         logType,
         responseData: err.response?.data,
       });
-      await tokenService.authenticate();
-      return fetchLogs(logType, { retryOn401: false });
+      await tokenService.authenticate(endpoint);
+      return fetchLogs(logType, { endpoint, retryOn401: false });
     }
 
-    const envelope = err.response?.data || {};
-    const data = envelope.data || envelope;
     if (err instanceof OmsApiError) {
-      logger.error('OMS logs API returned an invalid response', { logType, error: err.message });
+      logger.error('OMS logs API returned an invalid response', { endpoint, logType, error: err.message });
       throw err;
     }
     logger.error('Failed to fetch logs from OMS API', {
+      endpoint,
       logType,
       error: err.message,
       code: err.code,
@@ -71,14 +73,14 @@ async function fetchLogs(logType, { retryOn401 = true } = {}) {
   }
 }
 
-async function fetchAllLogs() {
+async function fetchAllLogs(endpoint = config.oms.baseUrl) {
   const [workerResult, apiResult] = await Promise.allSettled([
-    fetchLogs('WorkerLog'),
-    fetchLogs('ApiLog'),
+    fetchLogs('WorkerLog', { endpoint }),
+    fetchLogs('ApiLog', { endpoint }),
   ]);
 
   if (workerResult.status === 'rejected' && apiResult.status === 'rejected') {
-    logger.error('Failed to fetch logs from both WorkerLog and ApiLog sources');
+    logger.error('Failed to fetch logs from both WorkerLog and ApiLog sources', { endpoint });
     throw new OmsApiError('Failed to fetch logs from OMS API', apiResult.reason);
   }
 

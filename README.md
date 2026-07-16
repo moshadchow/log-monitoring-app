@@ -28,7 +28,8 @@ Edit `.env` and fill in your OMS credentials and Discord webhook URL.
 |---|---|
 | `NODE_ENV` | `development` or `production` |
 | `PORT` | HTTP port for the Express server |
-| `OMS_BASE_URL` | Base URL of the OMS API |
+| `OMS_API_ENDPOINTS` | Comma-separated OMS API base URLs to poll |
+| `OMS_BASE_URL` | Single OMS API base URL fallback when `OMS_API_ENDPOINTS` is not set |
 | `OMS_USERNAME` | OMS login ID |
 | `OMS_PASSWORD` | OMS password |
 | `OMS_DEVICE_ID` | Device identifier required by OMS login |

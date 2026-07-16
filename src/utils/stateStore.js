@@ -8,6 +8,14 @@ const DEFAULT_STATE = {
   lastExecutionAt: null,
   lastExecutionStatus: null,
   lastNotificationAt: null,
+  endpoints: {},
+};
+
+const DEFAULT_ENDPOINT_STATE = {
+  lastSeenLogId: null,
+  lastExecutionAt: null,
+  lastExecutionStatus: null,
+  lastNotificationAt: null,
 };
 
 function ensureStateFile() {
@@ -24,7 +32,20 @@ function readState() {
   ensureStateFile();
   try {
     const raw = fs.readFileSync(config.stateFilePath, 'utf-8');
-    return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    parsed.endpoints = parsed.endpoints || {};
+
+    if (Object.keys(parsed.endpoints).length === 0 && parsed.lastSeenLogId && config.oms.endpoints[0]) {
+      parsed.endpoints[config.oms.endpoints[0]] = {
+        ...DEFAULT_ENDPOINT_STATE,
+        lastSeenLogId: parsed.lastSeenLogId,
+        lastExecutionAt: parsed.lastExecutionAt,
+        lastExecutionStatus: parsed.lastExecutionStatus,
+        lastNotificationAt: parsed.lastNotificationAt,
+      };
+    }
+
+    return parsed;
   } catch (err) {
     logger.error('Failed to read state file, falling back to defaults', { error: err.message });
     return { ...DEFAULT_STATE };
@@ -42,4 +63,30 @@ function writeState(partialState) {
   return next;
 }
 
-module.exports = { readState, writeState };
+function readEndpointState(endpoint) {
+  const state = readState();
+  return {
+    ...DEFAULT_ENDPOINT_STATE,
+    ...(state.endpoints && state.endpoints[endpoint] ? state.endpoints[endpoint] : {}),
+  };
+}
+
+function writeEndpointState(endpoint, partialState) {
+  const current = readState();
+  const endpointState = {
+    ...DEFAULT_ENDPOINT_STATE,
+    ...(current.endpoints && current.endpoints[endpoint] ? current.endpoints[endpoint] : {}),
+    ...partialState,
+  };
+  return writeState({
+    endpoints: {
+      ...(current.endpoints || {}),
+      [endpoint]: endpointState,
+    },
+    lastExecutionAt: partialState.lastExecutionAt || current.lastExecutionAt,
+    lastExecutionStatus: partialState.lastExecutionStatus || current.lastExecutionStatus,
+    lastNotificationAt: partialState.lastNotificationAt || current.lastNotificationAt,
+  });
+}
+
+module.exports = { readState, writeState, readEndpointState, writeEndpointState };
